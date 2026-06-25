@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="ReadModelDemo.ApiService/ReadModelDemo.ApiService.csproj" />
+  <Project Path="ReadModelDemo.AppHost/ReadModelDemo.AppHost.csproj" />
+  <Project Path="ReadModelDemo.ServiceDefaults/ReadModelDemo.ServiceDefaults.csproj" />
+  <Project Path="ReadModelDemo.Web/ReadModelDemo.Web.csproj" />
+</Solution>

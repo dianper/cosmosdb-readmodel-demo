@@ -1,11 +1,16 @@
+#pragma warning disable ASPIRECOSMOSDB001
+
 var builder = DistributedApplication.CreateBuilder(args);
 
-#pragma warning disable ASPIRECOSMOSDB001
 var cosmos = builder.AddAzureCosmosDB("cosmos")
-    .RunAsPreviewEmulator(e => e
-        .WithLifetime(ContainerLifetime.Persistent)
-        .WithDataExplorer());
-#pragma warning restore ASPIRECOSMOSDB001
+    .WithHttpEndpoint(port: 8081, targetPort: 8081, name: "cosmos-http", isProxied: false)
+    .RunAsPreviewEmulator(emulator =>
+    {
+        emulator.WithContainerName("cosmos-readmodel");
+        emulator.WithDataExplorer();
+        emulator.WithLifetime(ContainerLifetime.Persistent);
+        emulator.WithArgs("--port", "8081");
+    });
 
 var directoryDb = cosmos.AddCosmosDatabase("directory-db");
 directoryDb.AddContainer("identity", "/tenantId");
