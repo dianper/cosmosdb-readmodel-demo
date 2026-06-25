@@ -15,4 +15,7 @@ public class OrgUnit
 
     [JsonProperty("managerId")]
     public string? ManagerId { get; set; }
+
+    [JsonProperty("parentOrgUnitId")]
+    public string? ParentOrgUnitId { get; set; }
 }

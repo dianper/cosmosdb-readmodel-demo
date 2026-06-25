@@ -54,12 +54,17 @@ public static class SeedData
         for (var i = 1; i <= TargetPerContainer; i++)
         {
             var managerIndex = random.Next(1, RelatedPoolSize + 1);
+            var parentOrgUnitId = i == 1
+                ? null
+                : $"ou-{random.Next(1, i):D5}";
+
             orgUnits.Add(new OrgUnit
             {
                 Id = $"ou-{i:D5}",
                 TenantId = TenantId,
                 DisplayName = $"OrgUnit {i:D5}",
-                ManagerId = $"i-{managerIndex:D5}"
+                ManagerId = $"i-{managerIndex:D5}",
+                ParentOrgUnitId = parentOrgUnitId
             });
         }
 

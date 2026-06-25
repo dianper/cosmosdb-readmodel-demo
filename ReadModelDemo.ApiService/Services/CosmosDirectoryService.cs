@@ -235,9 +235,12 @@ public class CosmosDirectoryService(CosmosClient cosmosClient)
                 OrgUnitId: null,
                 OrgUnitDisplayName: null,
                 ManagerId: null,
-                ManagerDisplayName: null));
+                ManagerDisplayName: null,
+                AncestorOrgUnitIds: []));
 
         var identityMap = identities.ToDictionary(x => x.Id);
+        var orgUnitMap = orgUnits.ToDictionary(x => x.Id);
+
         var orgUnitOnlyRows = orgUnits
             .Where(x => !relationshipOrgUnitIds.Contains(x.Id))
             .OrderBy(x => x.Id, StringComparer.Ordinal)
@@ -253,7 +256,8 @@ public class CosmosDirectoryService(CosmosClient cosmosClient)
                     OrgUnitId: x.Id,
                     OrgUnitDisplayName: x.DisplayName,
                     ManagerId: manager?.Id,
-                    ManagerDisplayName: manager?.DisplayName);
+                    ManagerDisplayName: manager?.DisplayName,
+                    AncestorOrgUnitIds: ResolveAncestorOrgUnitIds(x.Id, orgUnitMap));
             });
 
         return relationshipRows
@@ -295,9 +299,41 @@ public class CosmosDirectoryService(CosmosClient cosmosClient)
                     OrgUnitId: orgUnit?.Id ?? x.OrgUnitId,
                     OrgUnitDisplayName: orgUnit?.DisplayName,
                     ManagerId: manager?.Id,
-                    ManagerDisplayName: manager?.DisplayName);
+                    ManagerDisplayName: manager?.DisplayName,
+                    AncestorOrgUnitIds: ResolveAncestorOrgUnitIds(orgUnit?.Id ?? x.OrgUnitId, orgUnitMap));
             })
             .ToList();
+    }
+
+    private static IReadOnlyList<string> ResolveAncestorOrgUnitIds(
+        string? orgUnitId,
+        IReadOnlyDictionary<string, OrgUnit> orgUnitMap)
+    {
+        if (string.IsNullOrWhiteSpace(orgUnitId))
+            return [];
+
+        var ancestors = new List<string> { orgUnitId };
+        var currentId = orgUnitId;
+        var visited = new HashSet<string>(StringComparer.Ordinal) { currentId };
+
+        const int maxDepth = 64;
+        for (var depth = 0; depth < maxDepth; depth++)
+        {
+            if (!orgUnitMap.TryGetValue(currentId, out var currentOrgUnit))
+                break;
+
+            var parentId = currentOrgUnit.ParentOrgUnitId;
+            if (string.IsNullOrWhiteSpace(parentId))
+                break;
+
+            if (!visited.Add(parentId))
+                break;
+
+            ancestors.Add(parentId);
+            currentId = parentId;
+        }
+
+        return ancestors;
     }
 
     private static async Task<ContainerRead<T>> FetchAllByTenantAsync<T>(

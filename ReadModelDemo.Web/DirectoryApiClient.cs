@@ -41,5 +41,6 @@ public record FlatDirectoryItem(
     string? OrgUnitId,
     string? OrgUnitDisplayName,
     string? ManagerId,
-    string? ManagerDisplayName
+    string? ManagerDisplayName,
+    IReadOnlyList<string> AncestorOrgUnitIds
 );

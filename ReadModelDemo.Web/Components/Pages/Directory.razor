@@ -62,7 +62,14 @@
         <div><strong>Elapsed:</strong> @queryResult.ElapsedMs.ToString("F2") ms</div>
         <div><strong>Request Units:</strong> @queryResult.RequestUnits.ToString("F2")</div>
         <div><strong>Server items:</strong> @queryResult.Data.Items.Count / @queryResult.Data.TotalCount</div>
+        <div><strong>Page:</strong> @queryResult.Data.Page of @TotalPages</div>
         <div><strong>Filtered items (client):</strong> @FilteredItems.Count</div>
+    </div>
+
+    <div class="d-flex gap-2 align-items-center mb-3">
+        <button class="btn btn-outline-primary" @onclick="GoToPreviousPage" disabled="@(!CanGoPrevious)">Previous</button>
+        <button class="btn btn-outline-primary" @onclick="GoToNextPage" disabled="@(!CanGoNext)">Next</button>
+        <span>Showing page @queryResult.Data.Page of @TotalPages</span>
     </div>
 }
 
@@ -90,6 +97,7 @@ else
                     <th>Relationship</th>
                     <th>OrgUnit</th>
                     <th>Manager</th>
+                    <th>Ancestors</th>
                 </tr>
             </thead>
             <tbody>
@@ -101,6 +109,7 @@ else
                         <td>@FormatPair(item.RelationshipId, item.RelationshipDisplayName)</td>
                         <td>@FormatPair(item.OrgUnitId, item.OrgUnitDisplayName)</td>
                         <td>@FormatPair(item.ManagerId, item.ManagerDisplayName)</td>
+                        <td>@FormatAncestors(item.AncestorOrgUnitIds)</td>
                     </tr>
                 }
             </tbody>
@@ -125,6 +134,13 @@ else
 
     private List<FlatDirectoryItem> FilteredItems => ApplyLocalFilters();
 
+    private int TotalPages => queryResult is null
+        ? 1
+        : Math.Max(1, (int)Math.Ceiling(queryResult.Data.TotalCount / (double)queryResult.Data.PageSize));
+
+    private bool CanGoPrevious => !isLoading && queryResult is not null && queryResult.Data.Page > 1;
+    private bool CanGoNext => !isLoading && queryResult is not null && queryResult.Data.Page < TotalPages;
+
     private async Task LoadDirectory()
     {
         isLoading = true;
@@ -137,6 +153,9 @@ else
                 Math.Max(1, page),
                 Math.Clamp(pageSize, 1, 2000),
                 strategy);
+
+            page = queryResult?.Data.Page ?? page;
+            pageSize = queryResult?.Data.PageSize ?? pageSize;
         }
         catch (Exception ex)
         {
@@ -172,7 +191,8 @@ else
                 || Contains(x.OrgUnitId, term)
                 || Contains(x.OrgUnitDisplayName, term)
                 || Contains(x.ManagerId, term)
-                || Contains(x.ManagerDisplayName, term));
+                || Contains(x.ManagerDisplayName, term)
+                || ContainsAncestors(x.AncestorOrgUnitIds, term));
         }
 
         return items.ToList();
@@ -193,6 +213,35 @@ else
             return id;
 
         return $"{id} | {displayName}";
+    }
+
+    private static bool ContainsAncestors(IReadOnlyList<string>? ancestors, string term)
+        => ancestors?.Any(x => x.Contains(term, StringComparison.OrdinalIgnoreCase)) == true;
+
+    private static string FormatAncestors(IReadOnlyList<string>? ancestors)
+    {
+        if (ancestors is null || ancestors.Count == 0)
+            return "-";
+
+        return string.Join(" > ", ancestors);
+    }
+
+    private async Task GoToPreviousPage()
+    {
+        if (!CanGoPrevious)
+            return;
+
+        page--;
+        await LoadDirectory();
+    }
+
+    private async Task GoToNextPage()
+    {
+        if (!CanGoNext)
+            return;
+
+        page++;
+        await LoadDirectory();
     }
 
     private void ClearFilters()
