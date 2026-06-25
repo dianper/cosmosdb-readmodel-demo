@@ -1,0 +1,203 @@
+@page "/directory"
+@page "/readmodel"
+@rendermode InteractiveServer
+
+@inject DirectoryApiClient DirectoryApi
+
+<PageTitle>Read Model</PageTitle>
+
+<h1>Read Model</h1>
+<p>Fetch once, then apply local filters in the consumer UI.</p>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <label class="form-label" for="tenant">Tenant</label>
+        <input id="tenant" class="form-control" @bind="tenantId" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="strategy">Strategy</label>
+        <select id="strategy" class="form-select" @bind="strategy">
+            <option value="fanout">fanout</option>
+            <option value="two-phase">two-phase</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="page">Page</label>
+        <input id="page" class="form-control" type="number" min="1" @bind="page" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="pageSize">Page Size</label>
+        <input id="pageSize" class="form-control" type="number" min="1" max="2000" @bind="pageSize" />
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+        <button class="btn btn-primary w-100" @onclick="LoadDirectory" disabled="@isLoading">@buttonText</button>
+    </div>
+</div>
+
+@if (queryResult is not null)
+{
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <label class="form-label" for="rowType">Row Type</label>
+            <select id="rowType" class="form-select" @bind="rowTypeFilter">
+                <option value="all">all</option>
+                <option value="relationship-linked">relationship-linked</option>
+                <option value="relationship-only">relationship-only</option>
+                <option value="identity-only">identity-only</option>
+                <option value="orgunit-only">orgunit-only</option>
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="term">Local Filter</label>
+            <input id="term" class="form-control" @bind="searchTerm" placeholder="Filter by display name, id, orgUnit, manager..." />
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button class="btn btn-outline-secondary w-100" @onclick="ClearFilters">Clear filters</button>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary">
+        <div><strong>Strategy:</strong> @queryResult.Strategy</div>
+        <div><strong>Complexity:</strong> @queryResult.Complexity</div>
+        <div><strong>Elapsed:</strong> @queryResult.ElapsedMs.ToString("F2") ms</div>
+        <div><strong>Request Units:</strong> @queryResult.RequestUnits.ToString("F2")</div>
+        <div><strong>Server items:</strong> @queryResult.Data.Items.Count / @queryResult.Data.TotalCount</div>
+        <div><strong>Filtered items (client):</strong> @FilteredItems.Count</div>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (queryResult is null && !isLoading)
+{
+    <p><em>Run a query to load directory data.</em></p>
+}
+else if (isLoading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered table-sm">
+            <thead>
+                <tr>
+                    <th>Row Type</th>
+                    <th>Identity</th>
+                    <th>Relationship</th>
+                    <th>OrgUnit</th>
+                    <th>Manager</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in FilteredItems)
+                {
+                    <tr>
+                        <td>@item.RowType</td>
+                        <td>@FormatPair(item.IdentityId, item.IdentityDisplayName)</td>
+                        <td>@FormatPair(item.RelationshipId, item.RelationshipDisplayName)</td>
+                        <td>@FormatPair(item.OrgUnitId, item.OrgUnitDisplayName)</td>
+                        <td>@FormatPair(item.ManagerId, item.ManagerDisplayName)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private string tenantId = "tenant-demo";
+    private string strategy = "fanout";
+    private int page = 1;
+    private int pageSize = 100;
+
+    private bool isLoading;
+    private string? errorMessage;
+    private DirectoryQueryResult? queryResult;
+
+    private string rowTypeFilter = "all";
+    private string searchTerm = string.Empty;
+
+    private string buttonText => isLoading ? "Running..." : "Run query";
+
+    private List<FlatDirectoryItem> FilteredItems => ApplyLocalFilters();
+
+    private async Task LoadDirectory()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            queryResult = await DirectoryApi.GetDirectoryAsync(
+                tenantId,
+                Math.Max(1, page),
+                Math.Clamp(pageSize, 1, 2000),
+                strategy);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            queryResult = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private List<FlatDirectoryItem> ApplyLocalFilters()
+    {
+        if (queryResult is null)
+            return [];
+
+        IEnumerable<FlatDirectoryItem> items = queryResult.Data.Items;
+
+        if (!string.Equals(rowTypeFilter, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            items = items.Where(x => string.Equals(x.RowType, rowTypeFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            items = items.Where(x =>
+                Contains(x.IdentityId, term)
+                || Contains(x.IdentityDisplayName, term)
+                || Contains(x.RelationshipId, term)
+                || Contains(x.RelationshipDisplayName, term)
+                || Contains(x.OrgUnitId, term)
+                || Contains(x.OrgUnitDisplayName, term)
+                || Contains(x.ManagerId, term)
+                || Contains(x.ManagerDisplayName, term));
+        }
+
+        return items.ToList();
+    }
+
+    private static bool Contains(string? value, string term)
+        => value?.Contains(term, StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string FormatPair(string? id, string? displayName)
+    {
+        if (string.IsNullOrWhiteSpace(id) && string.IsNullOrWhiteSpace(displayName))
+            return "-";
+
+        if (string.IsNullOrWhiteSpace(id))
+            return displayName!;
+
+        if (string.IsNullOrWhiteSpace(displayName))
+            return id;
+
+        return $"{id} | {displayName}";
+    }
+
+    private void ClearFilters()
+    {
+        rowTypeFilter = "all";
+        searchTerm = string.Empty;
+    }
+}

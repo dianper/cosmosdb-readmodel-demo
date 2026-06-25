@@ -1,0 +1,116 @@
+@page "/benchmark"
+@rendermode InteractiveServer
+
+@inject BenchmarkApiClient BenchmarkApi
+
+<PageTitle>Benchmark</PageTitle>
+
+<h1>Benchmark</h1>
+
+<p>Comparison of read strategies for the flattened DTO.</p>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <label class="form-label" for="tenant">Tenant</label>
+        <input id="tenant" class="form-control" @bind="tenantId" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="page">Page</label>
+        <input id="page" class="form-control" type="number" min="1" @bind="page" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="pageSize">Page Size</label>
+        <input id="pageSize" class="form-control" type="number" min="1" max="2000" @bind="pageSize" />
+    </div>
+    <div class="col-md-2">
+        <label class="form-label" for="iterations">Iterations</label>
+        <input id="iterations" class="form-control" type="number" min="1" max="20" @bind="iterations" />
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-primary w-100" @onclick="Run" disabled="@isLoading">@buttonText</button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (result is not null)
+{
+    <p><strong>Executed at:</strong> @result.ExecutedAtUtc.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")</p>
+
+    <table class="table table-striped table-bordered">
+        <thead>
+            <tr>
+                <th>Strategy</th>
+                <th>Complexity</th>
+                <th>Min Time (ms)</th>
+                <th>Avg Time (ms)</th>
+                <th>P95 Time (ms)</th>
+                <th>RU Min</th>
+                <th>RU Avg</th>
+                <th>RU P95</th>
+                <th>Items</th>
+                <th>Reads Identity</th>
+                <th>Reads Relationship</th>
+                <th>Reads OrgUnit</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in result.Results.OrderBy(x => x.AvgElapsedMs))
+            {
+                <tr>
+                    <td>@row.Strategy</td>
+                    <td>@row.Complexity</td>
+                    <td>@row.MinElapsedMs.ToString("F2")</td>
+                    <td>@row.AvgElapsedMs.ToString("F2")</td>
+                    <td>@row.P95ElapsedMs.ToString("F2")</td>
+                    <td>@row.MinRequestUnits.ToString("F2")</td>
+                    <td>@row.AvgRequestUnits.ToString("F2")</td>
+                    <td>@row.P95RequestUnits.ToString("F2")</td>
+                    <td>@row.ResultItems</td>
+                    <td>@row.IdentityReads</td>
+                    <td>@row.RelationshipReads</td>
+                    <td>@row.OrgUnitReads</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string tenantId = "tenant-demo";
+    private int page = 1;
+    private int pageSize = 100;
+    private int iterations = 5;
+
+    private bool isLoading;
+    private string? errorMessage;
+    private BenchmarkResponse? result;
+
+    private string buttonText => isLoading ? "Running..." : "Run";
+
+    private async Task Run()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            result = await BenchmarkApi.RunBenchmarkAsync(
+                tenantId,
+                Math.Max(1, page),
+                Math.Clamp(pageSize, 1, 2000),
+                Math.Clamp(iterations, 1, 20));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
