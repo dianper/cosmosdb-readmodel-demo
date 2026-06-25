@@ -56,6 +56,32 @@ API service exposes:
 - Batch-resolves referenced identities and orgUnits.
 - Optimized for page-focused retrieval.
 
+## RU Calculation
+
+RU is not estimated by formula in this sample; it is measured directly from Cosmos SDK responses.
+
+- For each query page, Cosmos returns `RequestCharge`.
+- The service accumulates `RequestCharge` across all pages and operations involved in a request.
+
+Per strategy:
+
+1. `fanout`
+- Total RU = RU(identity query) + RU(relationship query) + RU(orgUnit query).
+
+2. `two-phase`
+- Total RU = RU(relationship count + page query)
+  + RU(identity batch query)
+  + RU(orgUnit batch query)
+  + RU(manager identity batch query when needed).
+
+In `/benchmark`, each strategy runs for N iterations (`iterations` parameter), and the API returns:
+
+- `MinRequestUnits`
+- `AvgRequestUnits`
+- `P95RequestUnits`
+
+These values are computed from the measured RU totals of each iteration, so benchmark output reflects real RU consumption for the selected input (`tenantId`, `page`, `pageSize`).
+
 ## Seed Behavior
 
 On development startup, seed creates deterministic data for tenant `tenant-demo`:
